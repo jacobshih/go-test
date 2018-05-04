@@ -13,7 +13,6 @@ type KnowledgeBase struct {
 }
 
 var kb KnowledgeBase
-var knowledgeBase map[string]interface{}
 
 func jsonTest() {
 	const jsonStream = `
@@ -107,32 +106,36 @@ func (kb *KnowledgeBase) learn(jsonString string) {
 
 func (kb *KnowledgeBase) merge(src, dst map[string]interface{}) {
 	for k, v := range src {
-		fmt.Println(k, v)
-		dstMap, ok := dst[k].(map[string]interface{})
+		_, ok := dst[k].(map[string]interface{})
 		if ok {
-			fmt.Println("recursive", dstMap, "[", k, "]")
 			kb.merge(src[k].(map[string]interface{}), dst[k].(map[string]interface{}))
 		} else {
-			fmt.Println("reflect.TypeOf(dst[k]): ", reflect.TypeOf(dst[k]), "[", k, "]")
-			dstSlice, ok := dst[k].([]interface{})
+			_, ok := dst[k].([]interface{})
 			if ok {
-				fmt.Println("reflect.TypeOf(dstSlice): ", reflect.TypeOf(dstSlice), dstSlice, "[", k, "]")
-				// FIXME: append one slice to another
-				dst[k] = append(dst[k].([]interface{}), v)
+				dst[k] = append(dst[k].([]interface{}), v.([]interface{})...)
 			} else {
-				fmt.Println(">>> dst:", dst, "[", k, "]")
 				dst[k] = v
 			}
 		}
 	}
-	fmt.Println()
 }
 
-func (kb *KnowledgeBase) find(s ...string) {
-	fmt.Println("find: length:", len(s))
-	for x, v := range s {
-		fmt.Println("x: ", x, " v: ", v)
+func (kb *KnowledgeBase) find(data map[string]interface{}, s ...string) interface{} {
+	if val, ok := data[s[0]]; ok {
+		if reflect.TypeOf(val).Kind() == reflect.String {
+			return val
+		} else if reflect.TypeOf(val).Kind() == reflect.Slice {
+			// FIXME: find in slice
+			return val
+		} else {
+			nextLevel := s[1:]
+			if len(nextLevel) > 0 {
+				return kb.find(val.(map[string]interface{}), nextLevel...)
+			}
+			return val
+		}
 	}
+	return nil
 }
 
 func (kb *KnowledgeBase) dump() {
@@ -257,25 +260,37 @@ const anotherJson = `{
 	}
 }
 `
+const jsonKeyValueOnly = `{
+	"mykey": "myvalue"
+}
+`
 
 func main() {
-//	jsonTest()
-//	stringCompareTest()
+	//	jsonTest()
+	//	stringCompareTest()
 
 	// knowledge base init
 	kb := KnowledgeBase{}
 	kb.init()
-	
+
 	// learn
 	kb.learn(jsonStream1)
 	kb.learn(jsonStream2)
 	kb.learn(jsonStream3)
 	kb.learn(jsonStream4)
 	kb.learn(anotherJson)
+	kb.learn(jsonKeyValueOnly)
 	kb.dump()
 
 	// find
-	kb.find("group01", "1", "name")
-	myargs := []string{"group01", "event", "20180428"}
-	kb.find(myargs...)
+	group1name1 := kb.find(kb.kbmap, "group01", "1", "name")
+	fmt.Println("==========================")
+	fmt.Println("group1name1: ", group1name1)
+
+	event1 := kb.find(kb.kbmap, "group01", "event", "20180428")
+	fmt.Println("==========================")
+	fmt.Println("event1: ")
+	for _, v := range event1.([]interface{}) {
+		kb.toJSON(v.(map[string]interface{}))
+	}
 }
